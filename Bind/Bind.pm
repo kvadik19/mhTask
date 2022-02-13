@@ -15,8 +15,10 @@ sub new {	#
 	my $class = shift;
 	my $init = { @_ };
 	my $self = bless( $init, $class);
+	my $host = ''; 
+	$host = ":host=$init->{'db_host'}" if $init->{'db_host'};
 
-	$schema = Bind::Schema->connection("dbi:Pg:dbname=$init->{'db_name'}",
+	$schema = Bind::Schema->connection("dbi:Pg$host:dbname=$init->{'db_name'}",
 										$init->{'db_user'}, $init->{'pass'},
 										{ pg_enable_utf8 => 1} );
 	$self->{'lease_qty'} = 5 unless $init->{'lease_qty'};

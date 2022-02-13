@@ -7,7 +7,7 @@ DROP INDEX IF EXISTS nodes_name;
 DROP INDEX IF EXISTS nodes_ipref;
 CREATE TABLE address (
 	ip inet PRIMARY KEY,
-	cnt smallint DEFAULT 0
+	cnt int DEFAULT 0
 );
 CREATE TABLE nodes (
 	id serial PRIMARY KEY,
