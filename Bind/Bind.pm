@@ -29,35 +29,13 @@ sub new {	#
 }
 
 #############
-sub lease {	#	Assign some IPs to that
+sub lease {	#	Return clients node with assigned pool
 #############
 	my $self = shift;
 	my $nodename = shift;
-	my $nodeinfo = {'name' => $nodename, 'pool' => []};
-	my $addlist = $schema->resultset('Address')->search( undef, 
-								{ order_by =>'cnt,ip', 
-								rows => $self->{'lease_qty'},
-								columns => 'ip'
-								});
-
-	for ( $addlist->all ) {
-		push( @{$nodeinfo->{'pool'}}, $_->ip);
-	}
-	$addlist->update_all( {cnt => \'cnt+1' } );		#' Increase usage counter
-
-	my $refstring = "\@> '{". join(',', @{$nodeinfo->{'pool'}} ) ."}'";		# Compose for WHERE of DBI placeholder
-	my $exists = $schema->resultset('Node')->search( { ipref => \$refstring });
-	
-if ($exists->count) {
-	say "$nodename EXIST ", ($exists->all)[0]->name;
-}
-
-	my $node = $schema->resultset('Node')->find_or_create( { name => $nodename }
-												,{ columns => ['id', 'ipref'] } );
-	$nodeinfo->{'id'} = $node->id;
-	$node->update( { ipref => $nodeinfo->{'pool'},
-					ltime => \'CURRENT_TIMESTAMP'} );	#' Store All-In-One
-
+	my $nodeinfo = Node->new( lease_qty => $self->{'lease_qty'},
+								name => $nodename
+							);
 	return $nodeinfo;
 }
 #############
@@ -97,6 +75,88 @@ sub init {	#	Reset address pool
 	my $qty = $init->{'qty'} || 253;
 	for ( 0..$qty -1 ) {
 		$schema->resultset( 'Address')->new( {'ip' => $ntoip->($ip_start + $_), 'cnt' => 0})->insert;
+	}
+}
+{package Node;
+use Data::Dumper;
+	#############
+	sub new {	#
+	#############
+		my $class = shift;
+		my $init = { @_ };
+		my $self = bless( $init, $class);
+
+		$self->lease;
+		return $self;
+	}
+
+	#############
+	sub lease {	#	Assign some IPs to that
+	#############
+		my $self = shift;
+		my $try = $self->{'lease_qty'};
+		my @addlist = $schema->resultset('Address')->search( undef, 
+									{ order_by =>'cnt,ip', 
+									columns => 'ip'
+									})->all;
+		my $try = scalar( @addlist) - $self->{'lease_qty'};
+my $uniq;
+my $tries = 0;
+		my $new_pool = [];
+		for ( 0..$self->{'lease_qty'} -1 ) {			# Minimal times used IPs is prior
+			push( @$new_pool, $addlist[$_]->ip);
+		}
+		my $candidate = [@$new_pool];		# Copy of pool been used for modding
+		for ( 0..$try -1 ) {
+			my $refstring = "\@> '{". join(',', @$candidate ) ."}'";		# Compose for WHERE of DBI placeholder
+			my $exists = $schema->resultset('Node')->search( { ipref => \$refstring },
+															{ columns =>['id', 'name']});
+			if ( $exists->count ) {			# It always used
+				$candidate = [@$new_pool];		# Reset candidate to original pool
+				my $pointer = $self->{'lease_qty'} + $try -$_ -1;			# Get IP from tail of prepared list
+				splice( @$candidate, $_, 1, $addlist[$pointer]->ip );
+
+say "TRY: $try, RPL: $_, POINTER: $pointer OF ".scalar(@$addlist);
+				$tries ++;
+				next;
+			}
+			$uniq =1;
+			$new_pool = $candidate;
+			last;
+		}
+		my $criteria = [];
+		for ( @$new_pool ) {
+			push( @$criteria, { ip => $_ });
+		}
+		$schema->resultset('Address')->search( $criteria)->update_all( {cnt => \'cnt+1' } );	#' Increase usage counter
+		
+		my $find = { name => $self->{'name'} };			# Search our record
+		$find = { id => $self->{'id'}} if $self->{'id'};
+		my $node = $schema->resultset('Node')->find_or_create( $find,
+													{ columns => ['id', 'ipref'] } );
+# 		$self->release if $node->in_storage;
+		$self->{'pool'} = $new_pool;
+		$self->{'id'} = $node->id;
+if ( $uniq ) {
+# 	say "UNIQUE $self->{'name'} ID $self->{'id'} try $tries times";
+} else {
+# 	say "NOT UNIQUE $self->{'name'} ID $self->{'id'} try $tries times";
+}
+		$node->update( { ipref => $self->{'pool'},
+						ltime => \'CURRENT_TIMESTAMP'} );	#' Store All-In-One
+	}
+
+	#############
+	sub release {	#	Empty leased address pool
+	#############
+		my $self = shift;
+		my $criteria = [];
+		while ( my $ip = shift( @{$self->{'pool'}}) ) {
+			push( @$criteria, { ip => $ip });
+		}
+		$schema->resultset('Address')->search( $criteria)
+							->search( {cnt => \'>0'} )->update_all( {cnt => \'cnt-1' } );	#' Decrease usage counter
+		return $self;
 	}
 }
 1
