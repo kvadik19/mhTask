@@ -15,11 +15,12 @@ sub new {	#
 	my $class = shift;
 	my $init = { @_ };
 	my $self = bless( $init, $class);
-	my $host = ''; 
-	$host = ":host=$init->{'db_host'}" if $init->{'db_host'};
+	my ($host, $port); 
+	$host = ";host=$init->{'db_host'}" if $init->{'db_host'};
+	$port = ";port=$init->{'db_port'}" if $init->{'db_port'};
 
-	$schema = Bind::Schema->connection("dbi:Pg$host:dbname=$init->{'db_name'}",
-										$init->{'db_user'}, $init->{'pass'},
+	$schema = Bind::Schema->connection("dbi:Pg:dbname=$init->{'db_name'}$host$port",
+										$init->{'db_user'}, $init->{'db_pass'},
 										{ pg_enable_utf8 => 1} );
 	$self->{'lease_qty'} = 5 unless $init->{'lease_qty'};
 	$self->{'lease_time'} = 60*60*24*30 unless $init->{'lease_time'};

@@ -6,6 +6,8 @@ use Bind::Bind;
 use Data::Dumper;
 
 my $bender = Bind::Bind->new(
+					db_host => '185.98.86.77',
+					db_port => 5432,
 					db_user => 'vdk',
 					db_name => 'test',
 					db_pass => '14rucoO',
