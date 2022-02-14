@@ -49,7 +49,7 @@ sub dump {	#		Dump table content
 	my $self = shift;
 	my $name = shift;
 	my $out = [];
-	for ( $schema->resultset( 'Address')->all ) {
+	for ( $schema->resultset( $name)->all ) {
 		my $def = {};
 		for my $col ( $_->columns ) {
 			$def->{ $col} = $_->$col;
@@ -62,7 +62,7 @@ sub dump {	#		Dump table content
 sub dump_nodes {	#
 #############
 	my $self = shift;
-	return $self->dump( 'Nodes');
+	return $self->dump( 'Node');
 }
 #############
 sub dump_address {	#
