@@ -14,7 +14,7 @@
     dbicdump -o dump_directory=./ Bind::Schema 'dbi:Pg:dbname=test;host=localhost;port=5432' userName userPass
  ### Bind::Bind
  Поддерживаемые методы:
- #### new()
+ #### $binder = Bind::Bind->new()
  Создает экземпляр объекта.
  
  Параметры:
@@ -31,5 +31,5 @@
 - from => Начальный адрес пула доступных адоресов
 - qty => Размер пула доступных адресов
 - keep_nodes => (1/0) Нужно ли обнулять список выданных комплектов адресов
-#### lease( $clientName )
+#### $node = $binder->lease( $clientName )
 Создает объект **Node**, арендатора адресов. Необязательный параметр $clientName служит вспомогательным (чисто для человеков) идентификатором 
