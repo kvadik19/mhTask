@@ -2,10 +2,8 @@ package Bind::Bind;
 
 use strict;
 use utf8;
-use Encode;
-use 5.18.0;
 use DBIx::Class;
-
+use Time::HiRes;
 use Bind::Schema;
 
 our $schema;
@@ -23,8 +21,16 @@ sub new {	#
 										$init->{'db_user'}, $init->{'db_pass'},
 										{ pg_enable_utf8 => 1} );
 	$self->{'lease_qty'} = 5 unless $init->{'lease_qty'};
-	$self->{'lease_time'} = 60*60*24*30 unless $init->{'lease_time'};
-# 	$self->init();
+	$self->{'lease_time'} = 60*60*24*30 unless $init->{'lease_time'};		# Maybe used later
+
+	if ( $init->{'from'} && $init->{'qty'} ) {			# Init sources
+		$self->init( from => $init->{'from'},
+					qty => $init->{'qty'},
+					keep_nodes => $init->{'keep_nodes'}
+					)
+	} elsif( !scalar($schema->resultset( 'Address')->all) ) {
+		$self->init();
+	}
 	return $self;
 }
 
@@ -32,21 +38,37 @@ sub new {	#
 sub lease {	#	Return clients node with assigned pool
 #############
 	my $self = shift;
-	my $nodename = shift;
-	my $nodeinfo = Node->new( lease_qty => $self->{'lease_qty'},
+	my $nodename = shift || '****-****';
+	return Node->new( lease_qty => $self->{'lease_qty'},
 								name => $nodename
 							);
-	return $nodeinfo;
 }
 #############
-sub dump {	#
+sub dump {	#		Dump table content
 #############
-	my $cnt = 1;
+	my $self = shift;
+	my $name = shift;
 	my $out = [];
-	for my $rec ( $schema->resultset( 'Address')->all ) {
-		push( @$out, {'ip' => $rec->ip, 'cnt' => $rec->cnt});
+	for ( $schema->resultset( 'Address')->all ) {
+		my $def = {};
+		for my $col ( $_->columns ) {
+			$def->{ $col} = $_->$col;
+		}
+		push( @$out, $def);
 	}
 	return $out;
+}
+#############
+sub dump_nodes {	#
+#############
+	my $self = shift;
+	return $self->dump( 'Nodes');
+}
+#############
+sub dump_address {	#
+#############
+	my $self = shift;
+	return $self->dump( 'Address');
 }
 #############
 sub init {	#	Reset address pool
@@ -66,8 +88,7 @@ sub init {	#	Reset address pool
 						my @a = split( /\./, $ip );
 						return int($a[0])*256**3+int($a[1])*256**2+int($a[2])*256+int($a[3]);
 					};
-
-	$schema->resultset( 'Node')->delete if scalar( $schema->resultset( 'Node')->all);
+	$schema->resultset( 'Node')->delete unless $init->{'keep_nodes'};
 	$schema->resultset( 'Address')->delete if scalar( $schema->resultset( 'Address')->all);
 
 	my $ip_start = $init->{'from'} || 1539727873;
@@ -85,6 +106,8 @@ use Data::Dumper;
 		my $class = shift;
 		my $init = { @_ };
 		my $self = bless( $init, $class);
+		$self->{'id'} = 0;
+		$self->{'pool'} = [];
 
 		$self->lease;
 		return $self;
@@ -94,66 +117,89 @@ use Data::Dumper;
 	sub lease {	#	Assign some IPs to that
 	#############
 		my $self = shift;
-		my $try = $self->{'lease_qty'};
+
+		my $time_start = Time::HiRes::time();
 		my @addlist = $schema->resultset('Address')->search( undef, 
-									{ order_by =>'cnt,ip', 
-									columns => 'ip'
+									{ order_by =>'cnt,ip', 		# Unused address first
+									columns => ['ip']
 									})->all;
-		my $try = scalar( @addlist) - $self->{'lease_qty'};
-my $uniq;
-my $tries = 0;
+
+		my $node;
+		if ( $self->{'id'} ) {			# Search our DB record
+			$node = $schema->resultset('Node')->find( { id => $self->{'id'}}, { columns => ['id','ipref','name'] } );
+		}
+		if ( $node ) {		# May be undefined, despite of ID presence
+			$self->release;		# Release address from assigned
+		} else {
+			$node = $schema->resultset('Node')->create( { name => $self->{'name'} } );
+		}
+
 		my $new_pool = [];
-		for ( 0..$self->{'lease_qty'} -1 ) {			# Minimal times used IPs is prior
+		for ( 0..$self->{'lease_qty'} -1 ) {			# Rarely used IPs is prior
 			push( @$new_pool, $addlist[$_]->ip);
 		}
+		my $max_search = scalar( @addlist) - $self->{'lease_qty'};
+		my $mix_idx = 0;			# One IP replace in stack
+		my $rep_idx = 0;		# Sequenced IP replace 
 		my $candidate = [@$new_pool];		# Copy of pool been used for modding
-		for ( 0..$try -1 ) {
+
+		$self->{'tries'} = 0;			# Some diagnostic
+		$self->{'assigned'} = 0;
+		my $try = 0;
+		while ( $try < $max_search ) {
 			my $refstring = "\@> '{". join(',', @$candidate ) ."}'";		# Compose for WHERE of DBI placeholder
 			my $exists = $schema->resultset('Node')->search( { ipref => \$refstring },
 															{ columns =>['id', 'name']});
-			if ( $exists->count ) {			# It always used
+			if ( $exists->count ) {		# It always used?
+				$self->{'tries'}++;
 				$candidate = [@$new_pool];		# Reset candidate to original pool
-				my $pointer = $self->{'lease_qty'} + $try -$_ -1;			# Get IP from tail of prepared list
-				splice( @$candidate, $_, 1, $addlist[$pointer]->ip );
 
-say "TRY: $try, RPL: $_, POINTER: $pointer OF ".scalar(@$addlist);
-				$tries ++;
+				my $pointer = $self->{'lease_qty'} + $try;			# Get IP from head of prepared list (rarely used first)
+# 				my $pointer = $self->{'lease_qty'} + $max_search -$try -1;		# Get IP from tail of prepared list (often used first)
+
+				splice( @$candidate, $mix_idx++, 1, $addlist[$pointer]->ip );
+				$mix_idx = $rep_idx if $mix_idx == $self->{'lease_qty'};		# Cyclic from begin
+				$try++;
+				if ( $try == $max_search ) {
+					splice( @$new_pool, $rep_idx++, 1, $addlist[$pointer]->ip );
+					$mix_idx = $rep_idx;
+					$try = 0;
+					last if $rep_idx == $self->{'lease_qty'};		# Unsuccess tries limit
+				}
 				next;
 			}
-			$uniq =1;
+			$self->{'assigned'} = 1;
 			$new_pool = $candidate;
 			last;
 		}
-		my $criteria = [];
+
+		my $criteria = [];			# Update used IPs counter
 		for ( @$new_pool ) {
 			push( @$criteria, { ip => $_ });
 		}
+
 		$schema->resultset('Address')->search( $criteria)->update_all( {cnt => \'cnt+1' } );	#' Increase usage counter
-		
-		my $find = { name => $self->{'name'} };			# Search our record
-		$find = { id => $self->{'id'}} if $self->{'id'};
-		my $node = $schema->resultset('Node')->find_or_create( $find,
-													{ columns => ['id', 'ipref'] } );
-# 		$self->release if $node->in_storage;
+
+		$node->update( { ipref => $new_pool, ltime => \'CURRENT_TIMESTAMP'} );	#' Store All-In-One
+
+		$self->{'time'} = Time::HiRes::time();
+		$self->{'elapsed'} = $self->{'time'} - $time_start;
 		$self->{'pool'} = $new_pool;
 		$self->{'id'} = $node->id;
-if ( $uniq ) {
-# 	say "UNIQUE $self->{'name'} ID $self->{'id'} try $tries times";
-} else {
-# 	say "NOT UNIQUE $self->{'name'} ID $self->{'id'} try $tries times";
-}
-		$node->update( { ipref => $self->{'pool'},
-						ltime => \'CURRENT_TIMESTAMP'} );	#' Store All-In-One
 	}
 
-	#############
+	#################
 	sub release {	#	Empty leased address pool
-	#############
+	#################
 		my $self = shift;
 		my $criteria = [];
 		while ( my $ip = shift( @{$self->{'pool'}}) ) {
 			push( @$criteria, { ip => $ip });
 		}
+		$self->{'time'} = Time::HiRes::time();
+		$self->{'elapsed'} = 0;
+		$self->{'tries'} = 0;
+		$self->{'assigned'} = 0;
 		$schema->resultset('Address')->search( $criteria)
 							->search( {cnt => \'>0'} )->update_all( {cnt => \'cnt-1' } );	#' Decrease usage counter
 		return $self;
