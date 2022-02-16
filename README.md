@@ -68,29 +68,31 @@
 При тестировании отмечено:
 - При распределении 8 адресов по 64 объектам успешно назначены адреса 56 объектам за 1.66 сек. Каждый адрес использован 35 раз. Последний объект обрабатывался 0.05 сек.
 - 253 адреса распределены между 2048 объектами за 674.65 сек. Частота использования адресов - 40-41. Для назначения комплекта адресов последнему, 2048-му объекту, потребовалось 0.80 сек.
-Характеристики машины
+
+ ##### Характеристики машины
+
     Architecture:          x86_64
-CPU op-mode(s):        32-bit, 64-bit
-Byte Order:            Little Endian
-CPU(s):                1
-On-line CPU(s) list:   0
-Thread(s) per core:    1
-Core(s) per socket:    1
-Socket(s):             1
-NUMA node(s):          1
-Vendor ID:             GenuineIntel
-CPU family:            6
-Model:                 62
-Model name:            Intel(R) Xeon(R) CPU E7-4830 v2 @ 2.20GHz
-Stepping:              7
-CPU MHz:               2194.711
-BogoMIPS:              4389.42
-Hypervisor vendor:     VMware
-Virtualization type:   full
-L1d cache:             32K
-L1i cache:             32K
-L2 cache:              256K
-L3 cache:              20480K
-NUMA node0 CPU(s):     0
-RAM                    2Gb
-SWAP                   4Gb
+    CPU op-mode(s):        32-bit, 64-bit
+    Byte Order:            Little Endian
+    CPU(s):                1
+    On-line CPU(s) list:   0
+    Thread(s) per core:    1
+    Core(s) per socket:    1
+    Socket(s):             1
+    NUMA node(s):          1
+    Vendor ID:             GenuineIntel
+    CPU family:            6
+    Model:                 62
+    Model name:            Intel(R) Xeon(R) CPU E7-4830 v2 @ 2.20GHz
+    Stepping:              7
+    CPU MHz:               2194.711
+    BogoMIPS:              4389.42
+    Hypervisor vendor:     VMware
+    Virtualization type:   full
+    L1d cache:             32K
+    L1i cache:             32K
+    L2 cache:              256K
+    L3 cache:              20480K
+    NUMA node0 CPU(s):     0
+    RAM                    2Gb
+    SWAP                   4Gb
