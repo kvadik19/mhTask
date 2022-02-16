@@ -5,12 +5,9 @@ package Bind::Bind;
 
 use strict;
 use utf8;
-use 5.18.0;
 use DBIx::Class;
 use Time::HiRes;
 use Bind::Schema;
-
-use Data::Dumper;
 
 our $schema;
 #############
@@ -106,7 +103,7 @@ sub init {	#	Reset address pool
 }
 
 {package Node;
-use Data::Dumper;
+
 	#############
 	sub new {	#
 	#############
