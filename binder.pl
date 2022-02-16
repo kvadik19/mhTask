@@ -30,7 +30,7 @@ my $time_avg = 0;
 for ( 0..127) {
 	my $node = $bender->lease("Node #$_");
 	push( @$nodes, $node);
-# 	say "ASSIGNED: $node->{'assigned'}, AFTER $node->{'tries'} TRIES ON $node->{'elapsed'} sec.";
+# 	say "ASSIGNED: $node->{'assigned'}, AFTER $node->{'tries'} TRIES IN $node->{'elapsed'} sec.";
 	$time_total += $node->{'elapsed'};
 	$time_avg += $node->{'elapsed'};
 	$time_avg /= 2;
